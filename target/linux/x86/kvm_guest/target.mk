@@ -1,2 +1,4 @@
 BOARDNAME:=KVM Guest
-DEFAULT_PACKAGES += kmod-virtio-balloon kmod-virtio-net kmod-virtio-random
+FEATURES:=ext4 pci usb
+DEFAULT_PACKAGES += kmod-button-hotplug kmod-virtio-balloon kmod-virtio-net kmod-virtio-random
+CPU_TYPE := pentium4

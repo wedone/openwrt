@@ -49,3 +49,26 @@ endef
 
 $(eval $(call Profile,TEW712BR))
 
+
+define Profile/TEW732BR
+	NAME:=TRENDNet TEW-732BR
+	PACKAGES:=
+endef
+
+define Profile/TEW732BR/Description
+	Package set optimized for the TRENDNet TEW-732BR.
+endef
+
+$(eval $(call Profile,TEW732BR))
+
+
+define Profile/TEW823DRU
+	NAME:=TRENDNet TEW-823DRU
+	PACKAGES:=kmod-usb-core kmod-usb2 kmod-ath10k
+endef
+
+define Profile/TEW823DRU/Description
+	Package set optimized for the TRENDNet TEW-823DRU.
+endef
+
+$(eval $(call Profile,TEW823DRU))

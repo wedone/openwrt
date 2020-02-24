@@ -33,14 +33,23 @@ struct ath9k_platform_data {
 
 	bool endian_check;
 	bool is_clk_25mhz;
+	bool tx_gain_buffalo;
 	bool disable_2ghz;
 	bool disable_5ghz;
+	bool led_active_high;
 
 	int (*get_mac_revision)(void);
 	int (*external_reset)(void);
 
+	bool use_eeprom;
+
 	int num_leds;
 	const struct gpio_led *leds;
+	const char *led_name;
+
+	unsigned num_btns;
+	const struct gpio_keys_button *btns;
+	unsigned btn_poll_interval;
 };
 
 #endif /* _LINUX_ATH9K_PLATFORM_H */

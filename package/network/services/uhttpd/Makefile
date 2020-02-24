@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2010-2013 Jo-Philipp Wich <jow@openwrt.org>
+# Copyright (C) 2010-2015 Jo-Philipp Wich <jow@openwrt.org>
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -8,15 +8,16 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=uhttpd
-PKG_VERSION:=2013-04-17
+PKG_VERSION:=2015-11-08
 PKG_RELEASE=$(PKG_SOURCE_VERSION)
 
 PKG_SOURCE_PROTO:=git
-PKG_SOURCE_URL:=git://nbd.name/uhttpd2.git
+PKG_SOURCE_URL=$(OPENWRT_GIT)/project/uhttpd.git
 PKG_SOURCE_SUBDIR:=$(PKG_NAME)-$(PKG_VERSION)
-PKG_SOURCE_VERSION:=d518cb32327492ad73c4583bb69d1d678410a631
+PKG_SOURCE_VERSION:=fe01ef3f52adae9da38ef47926cd50974af5d6b7
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION)-$(PKG_SOURCE_VERSION).tar.gz
-PKG_MAINTAINER:=Felix Fietkau <nbd@openwrt.org>
+PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
+PKG_LICENSE:=ISC
 
 PKG_BUILD_DEPENDS = ustream-ssl
 
@@ -32,7 +33,7 @@ endef
 
 define Package/uhttpd
   $(Package/uhttpd/default)
-  DEPENDS:=+libubox
+  DEPENDS:=+libubox +libblobmsg-json +libjson-script
 endef
 
 define Package/uhttpd/description
@@ -51,7 +52,11 @@ endef
 define Package/uhttpd-mod-tls
   $(Package/uhttpd/default)
   TITLE+= (TLS plugin)
-  DEPENDS:=uhttpd +PACKAGE_uhttpd-mod-tls_cyassl:libustream-cyassl +PACKAGE_uhttpd-mod-tls_openssl:libustream-openssl
+  DEPENDS:=uhttpd \
+	+PACKAGE_uhttpd-mod-tls_polarssl:libustream-polarssl \
+	+PACKAGE_uhttpd-mod-tls_mbedtls:libustream-mbedtls \
+	+PACKAGE_uhttpd-mod-tls_cyassl:libustream-cyassl \
+	+PACKAGE_uhttpd-mod-tls_openssl:libustream-openssl
 endef
 
 define Package/uhttpd-mod-tls/description
@@ -62,7 +67,13 @@ define Package/uhttpd-mod-tls/config
   choice
     depends on PACKAGE_uhttpd-mod-tls
     prompt "TLS Provider"
-    default PACKAGE_uhttpd-mod-tls_cyassl
+    default PACKAGE_uhttpd-mod-tls_polarssl
+
+    config PACKAGE_uhttpd-mod-tls_mbedtls
+      bool "mbedTLS"
+
+    config PACKAGE_uhttpd-mod-tls_polarssl
+      bool "PolarSSL"
 
     config PACKAGE_uhttpd-mod-tls_cyassl
       bool "CyaSSL"
@@ -100,6 +111,10 @@ define Package/uhttpd/conffiles
 /etc/uhttpd.key
 endef
 
+ifneq ($(CONFIG_USE_GLIBC),)
+  TARGET_CFLAGS += -D_DEFAULT_SOURCE
+endif
+
 TARGET_LDFLAGS += -lcrypt
 
 CMAKE_OPTIONS = -DTLS_SUPPORT=on
@@ -123,8 +138,9 @@ define Package/uhttpd-mod-lua/install
 endef
 
 define Package/uhttpd-mod-ubus/install
-	$(INSTALL_DIR) $(1)/usr/lib
+	$(INSTALL_DIR) $(1)/usr/lib $(1)/etc/uci-defaults
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/uhttpd_ubus.so $(1)/usr/lib/
+	$(INSTALL_DATA) ./files/ubus.default $(1)/etc/uci-defaults/00_uhttpd_ubus
 endef
 
 

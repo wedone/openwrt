@@ -1,6 +1,6 @@
 /*
  * Client for the Emergency Access Daemon
- * Copyright (C) 2008 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2008 Felix Fietkau <nbd@nbd.name>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2
@@ -67,7 +67,7 @@ static uint16_t sid = 0;
 static void
 set_nonblock(int enable)
 {
-	if (enable == !!(sockflags & O_NONBLOCK));
+	if (enable == !!(sockflags & O_NONBLOCK))
 		return;
 
 	sockflags ^= O_NONBLOCK;

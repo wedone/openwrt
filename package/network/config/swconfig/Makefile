@@ -10,7 +10,8 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=swconfig
 PKG_RELEASE:=10
 
-PKG_MAINTAINER:=Felix Fietkau <nbd@openwrt.org>
+PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
+PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/kernel.mk
@@ -18,7 +19,7 @@ include $(INCLUDE_DIR)/kernel.mk
 define Package/swconfig
   SECTION:=base
   CATEGORY:=Base system
-  DEPENDS:=@!TARGET_brcm47xx +libuci +libnl-tiny
+  DEPENDS:=+libuci +libnl-tiny
   TITLE:=Switch configuration utility
 endef
 
@@ -41,9 +42,18 @@ define Build/Compile
 		LIBS="$(TARGET_LDFLAGS) -lnl-tiny -lm -luci"
 endef
 
+define Build/InstallDev
+	$(INSTALL_DIR) $(1)/usr/include
+	$(CP) $(PKG_BUILD_DIR)/swlib.h $(1)/usr/include/
+
+	$(INSTALL_DIR) $(1)/usr/lib
+	$(CP) $(PKG_BUILD_DIR)/libsw.so $(1)/usr/lib/
+endef
+
 define Package/swconfig/install
 	$(INSTALL_DIR) $(1)/sbin $(1)/lib/network
 	$(INSTALL_BIN) $(PKG_BUILD_DIR)/swconfig $(1)/sbin/swconfig
+	$(INSTALL_BIN) $(PKG_BUILD_DIR)/libsw.so $(1)/lib
 	$(INSTALL_DATA) ./files/switch.sh $(1)/lib/network/
 endef
 

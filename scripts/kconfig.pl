@@ -1,6 +1,6 @@
 #!/usr/bin/env perl
 # 
-# Copyright (C) 2006 Felix Fietkau <nbd@openwrt.org>
+# Copyright (C) 2006 Felix Fietkau <nbd@nbd.name>
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -29,7 +29,7 @@ sub load_config($$) {
 	my $mod_plus = shift;
 	my %config;
 
-	open FILE, "$file" or die "can't open file";
+	open FILE, "$file" or die "can't open file '$file'";
 	while (<FILE>) {
 		chomp;
 		/^$PREFIX(.+?)=(.+)/ and do {

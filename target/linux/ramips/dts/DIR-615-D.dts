@@ -1,28 +1,23 @@
 /dts-v1/;
 
-/include/ "rt3050.dtsi"
+#include "rt3050.dtsi"
 
 / {
 	compatible = "DIR-615-D", "ralink,rt3050-soc";
 	model = "D-Link DIR-615 D";
 
-	palmbus@10000000 {
-		sysc@0 {
-			ralink,pinmux = "i2c", "spi", "uartlite", "jtag", "mdio", "sdram", "rgmii";
-			ralink,uartmux = "gpio";
-			ralink,wdtmux = <1>;
+	pinctrl {
+		state_default: pinctrl0 {
+			gpio {
+				ralink,group = "i2c", "spi", "jtag", "mdio", "rgmii", "uartf";
+				ralink,function = "gpio";
+			};
 		};
-
-		gpio0: gpio@600 {
-			status = "okay";
-		};
-
 	};
 
 	cfi@1f000000 {
 		compatible = "cfi-flash";
 		reg = <0x1f000000 0x800000>;
-
 		bank-width = <2>;
 		device-width = <2>;
 		#address-cells = <1>;
@@ -34,7 +29,7 @@
 			read-only;
 		};
 
-		partition@30000 {
+		devdata: partition@30000 {
 			label = "devdata";
 			reg = <0x30000 0x10000>;
 			read-only;
@@ -52,13 +47,12 @@
 		};
 	};
 
-	ethernet@10100000 {
-		status = "okay";
+	esw@10110000 {
+		mediatek,portmap = <0x2f>;
 	};
 
-	esw@10110000 {
-		status = "okay";
-		ralink,portmap = <0x2f>;
+	wmac@10180000 {
+		ralink,mtd-eeprom = <&devdata 0x4000>;
 	};
 
 	gpio-keys-polled {
@@ -66,11 +60,13 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		poll-interval = <20>;
+
 		reset {
 			label = "reset";
 			gpios = <&gpio0 10 1>;
 			linux,code = <0x198>;
 		};
+
 		wps {
 			label = "wps";
 			gpios = <&gpio0 0 1>;
@@ -78,30 +74,31 @@
 		};
 	};
 
-	wmac@10180000 {
-		status = "okay";
-	};
-
 	gpio-leds {
 		compatible = "gpio-leds";
+
 		status {
-			label = "d-link:amber:status";
+			label = "dir-615-d:amber:status";
 			gpios = <&gpio0 8 1>;
 		};
+
 		status2 {
-			label = "d-link:green:status";
+			label = "dir-615-d:green:status";
 			gpios = <&gpio0 9 1>;
 		};
+
 		wan {
-			label = "d-link:amber:wan";
+			label = "dir-615-d:amber:wan";
 			gpios = <&gpio0 14 1>;
 		};
+
 		wan2 {
-			label = "d-link:green:wan";
+			label = "dir-615-d:green:wan";
 			gpios = <&gpio0 12 1>;
 		};
+
 		wps {
-			label = "d-link:blue:wps";
+			label = "dir-615-d:blue:wps";
 			gpios = <&gpio0 13 1>;
 		};
 	};

@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2006-2012 OpenWrt.org
+# Copyright (C) 2006-2016 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -8,15 +8,18 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=lzo
-PKG_VERSION:=2.06
+PKG_VERSION:=2.09
 PKG_RELEASE:=1
 
 PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
 PKG_SOURCE_URL:=http://www.oberhumer.com/opensource/lzo/download/
-PKG_MD5SUM:=95380bd4081f85ef08c5209f4107e9f8
+PKG_MD5SUM:=c7ffc9a103afe2d1bba0b015e7aa887f
 
 PKG_FIXUP:=autoreconf
 PKG_INSTALL:=1
+PKG_LICENSE:=GPL-2.0+
+
+PKG_BUILD_PARALLEL:=1
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -41,6 +44,10 @@ endef
 
 TARGET_CFLAGS += $(FPIC)
 MAKE_FLAGS += CFLAGS_O="$(TARGET_CFLAGS)"
+
+ifeq ($(CONFIG_i386)$(CONFIG_x86_64),)
+  TARGET_CFLAGS += -DLZO_CFG_NO_UNALIGNED=1
+endif
 
 define Build/InstallDev
 	$(INSTALL_DIR) $(1)/usr/include $(1)/usr/lib

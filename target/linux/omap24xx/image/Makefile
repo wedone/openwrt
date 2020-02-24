@@ -1,5 +1,5 @@
 # 
-# Copyright (C) 2010 OpenWrt.org
+# Copyright (C) 2010-2015 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -7,12 +7,10 @@
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
-JFFS2_BLOCKSIZE=128k
-JFFS2OPTS += --little-endian --pagesize=0x800 --no-cleanmarkers --pad
-
+NAND_BLOCKSIZE=2048-128k
 
 define Image/BuildKernel
-	$(CP) $(LINUX_DIR)/arch/arm/boot/zImage $(BIN_DIR)/$(IMG_PREFIX)-zImage
+	cat $(KDIR)/zImage $(DTS_DIR)/omap2420-n810.dtb > $(BIN_DIR)/$(IMG_PREFIX)-zImage
 	chmod 0644 $(BIN_DIR)/$(IMG_PREFIX)-zImage
 endef
 

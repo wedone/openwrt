@@ -238,6 +238,24 @@ static int b53_mdio_write64(struct b53_device *dev, u8 page, u8 reg,
 	return b53_mdio_op(dev, page, reg, REG_MII_ADDR_WRITE);
 }
 
+static int b53_mdio_phy_read16(struct b53_device *dev, int addr, u8 reg,
+			       u16 *value)
+{
+	struct mii_bus *bus = dev->priv;
+
+	*value = mdiobus_read(bus, addr, reg);
+
+	return 0;
+}
+
+static int b53_mdio_phy_write16(struct b53_device *dev, int addr, u8 reg,
+				u16 value)
+{
+	struct mii_bus *bus = dev->priv;
+
+	return mdiobus_write(bus, addr, reg, value);
+}
+
 static struct b53_io_ops b53_mdio_ops = {
 	.read8 = b53_mdio_read8,
 	.read16 = b53_mdio_read16,
@@ -249,6 +267,8 @@ static struct b53_io_ops b53_mdio_ops = {
 	.write32 = b53_mdio_write32,
 	.write48 = b53_mdio_write48,
 	.write64 = b53_mdio_write64,
+	.phy_read16 = b53_mdio_phy_read16,
+	.phy_write16 = b53_mdio_phy_write16,
 };
 
 static int b53_phy_probe(struct phy_device *phydev)
@@ -296,7 +316,7 @@ static int b53_phy_config_init(struct phy_device *phydev)
 
 	ret = b53_switch_register(dev);
 	if (ret) {
-		pr_info("failed to register switch: %i\n", ret);
+		dev_err(dev->dev, "failed to register switch: %i\n", ret);
 		return ret;
 	}
 
@@ -357,10 +377,26 @@ static struct phy_driver b53_phy_driver_id1 = {
 	},
 };
 
-/* BCM53125 */
+/* BCM53125, BCM53128 */
 static struct phy_driver b53_phy_driver_id2 = {
 	.phy_id		= 0x03625c00,
 	.name		= "Broadcom B53 (2)",
+	.phy_id_mask	= 0x1ffffc00,
+	.features	= 0,
+	.probe		= b53_phy_probe,
+	.remove		= b53_phy_remove,
+	.config_aneg	= b53_phy_config_aneg,
+	.config_init	= b53_phy_config_init,
+	.read_status	= b53_phy_read_status,
+	.driver = {
+		.owner = THIS_MODULE,
+	},
+};
+
+/* BCM5365 */
+static struct phy_driver b53_phy_driver_id3 = {
+	.phy_id		= 0x00406000,
+	.name		= "Broadcom B53 (3)",
 	.phy_id_mask	= 0x1ffffc00,
 	.features	= 0,
 	.probe		= b53_phy_probe,
@@ -383,13 +419,21 @@ int __init b53_phy_driver_register(void)
 
 	ret = phy_driver_register(&b53_phy_driver_id2);
 	if (ret)
-		phy_driver_unregister(&b53_phy_driver_id1);
+		goto err1;
 
+	ret = phy_driver_register(&b53_phy_driver_id3);
+	if (!ret)
+		return 0;
+
+	phy_driver_unregister(&b53_phy_driver_id2);
+err1:
+	phy_driver_unregister(&b53_phy_driver_id1);
 	return ret;
 }
 
 void __exit b53_phy_driver_unregister(void)
 {
+	phy_driver_unregister(&b53_phy_driver_id3);
 	phy_driver_unregister(&b53_phy_driver_id2);
 	phy_driver_unregister(&b53_phy_driver_id1);
 }

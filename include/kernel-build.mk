@@ -32,6 +32,7 @@ endef
 
 define Kernel/CompileImage
 	$(call Kernel/CompileImage/Default)
+	$(call Kernel/CompileImage/Initramfs)
 endef
 
 define Kernel/Clean
@@ -53,13 +54,17 @@ ifdef CONFIG_COLLECT_KERNEL_DEBUG
 		$(STAGING_DIR_ROOT)/lib/modules/$(LINUX_VERSION)/* \
 		$(KERNEL_BUILD_DIR)/debug/modules/
 	$(FIND) $(KERNEL_BUILD_DIR)/debug -type f | $(XARGS) $(KERNEL_CROSS)strip --only-keep-debug
-	$(TAR) c -C $(KERNEL_BUILD_DIR) debug | bzip2 -c -9 > $(BIN_DIR)/kernel-debug.tar.bz2
+	$(TAR) c -C $(KERNEL_BUILD_DIR) debug \
+		$(if $(SOURCE_DATE_EPOCH),--mtime="@$(SOURCE_DATE_EPOCH)") \
+		| bzip2 -c -9 > $(BIN_DIR)/kernel-debug.tar.bz2
   endef
 endif
 
 define BuildKernel
   $(if $(QUILT),$(Build/Quilt))
   $(if $(LINUX_SITE),$(call Download,kernel))
+
+  .NOTPARALLEL:
 
   $(STAMP_PREPARED): $(if $(LINUX_SITE),$(DL_DIR)/$(LINUX_SOURCE))
 	-rm -rf $(KERNEL_BUILD_DIR)
@@ -75,9 +80,9 @@ define BuildKernel
 		xargs $(TARGET_CROSS)nm | \
 		awk '$$$$1 == "U" { print $$$$2 } ' | \
 		sort -u > $(KERNEL_BUILD_DIR)/mod_symtab.txt
-	$(TARGET_CROSS)nm -n $(LINUX_DIR)/vmlinux.o | grep ' r __ksymtab' | sed -e 's,........ r __ksymtab_,,' > $(KERNEL_BUILD_DIR)/kernel_symtab.txt
-	grep -f $(KERNEL_BUILD_DIR)/mod_symtab.txt $(KERNEL_BUILD_DIR)/kernel_symtab.txt > $(KERNEL_BUILD_DIR)/sym_include.txt
-	grep -vf $(KERNEL_BUILD_DIR)/mod_symtab.txt $(KERNEL_BUILD_DIR)/kernel_symtab.txt > $(KERNEL_BUILD_DIR)/sym_exclude.txt
+	$(TARGET_CROSS)nm -n $(LINUX_DIR)/vmlinux.o | grep ' [rR] __ksymtab' | sed -e 's,........ [rR] __ksymtab_,,' > $(KERNEL_BUILD_DIR)/kernel_symtab.txt
+	grep -Ff $(KERNEL_BUILD_DIR)/mod_symtab.txt $(KERNEL_BUILD_DIR)/kernel_symtab.txt > $(KERNEL_BUILD_DIR)/sym_include.txt
+	grep -Fvf $(KERNEL_BUILD_DIR)/mod_symtab.txt $(KERNEL_BUILD_DIR)/kernel_symtab.txt > $(KERNEL_BUILD_DIR)/sym_exclude.txt
 	( \
 		echo '#define SYMTAB_KEEP \'; \
 		cat $(KERNEL_BUILD_DIR)/sym_include.txt | \
@@ -116,12 +121,13 @@ define BuildKernel
   define BuildKernel
   endef
 
-  download: $(DL_DIR)/$(LINUX_SOURCE)
+  download: $(if $(LINUX_SITE),$(DL_DIR)/$(LINUX_SOURCE))
   prepare: $(STAMP_CONFIGURED)
   compile: $(LINUX_DIR)/.modules
 	$(MAKE) -C image compile TARGET_BUILD=
 
   oldconfig menuconfig nconfig: $(STAMP_PREPARED) $(STAMP_CHECKED) FORCE
+	rm -f $(LINUX_DIR)/.config.prev
 	rm -f $(STAMP_CONFIGURED)
 	$(LINUX_RECONF_CMD) > $(LINUX_DIR)/.config
 	$(_SINGLE)$(MAKE) -C $(LINUX_DIR) $(KERNEL_MAKEOPTS) $$@

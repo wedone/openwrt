@@ -1,4 +1,4 @@
-# 
+#
 # Copyright (C) 2006-2008 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
@@ -13,7 +13,8 @@ PKG_RELEASE:=1
 PKG_BUILD_DEPENDS:=libpcap
 PKG_BUILD_DIR:=$(BUILD_DIR)/ead
 
-PKG_MAINTAINER:=Felix Fietkau <nbd@openwrt.org>
+PKG_MAINTAINER:=Felix Fietkau <nbd@nbd.name>
+PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
 include $(INCLUDE_DIR)/kernel.mk
@@ -33,7 +34,6 @@ endef
 CONFIGURE_PATH = tinysrp
 
 TARGET_CFLAGS += \
-	-I$(LINUX_DIR)/include \
 	-I$(PKG_BUILD_DIR) \
 	-I$(PKG_BUILD_DIR)/tinysrp \
 	$(TARGET_CPPFLAGS)

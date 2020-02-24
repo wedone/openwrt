@@ -1,7 +1,7 @@
 /*
  * swconfig.c: Switch configuration utility
  *
- * Copyright (C) 2008 Felix Fietkau <nbd@openwrt.org>
+ * Copyright (C) 2008 Felix Fietkau <nbd@nbd.name>
  * Copyright (C) 2010 Martin Mares <mj@ucw.cz>
  *
  * This program is free software; you can redistribute it and/or
@@ -84,9 +84,27 @@ list_attributes(struct switch_dev *dev)
 	print_attrs(dev->port_ops);
 }
 
+static const char *
+speed_str(int speed)
+{
+	switch (speed) {
+	case 10:
+		return "10baseT";
+	case 100:
+		return "100baseT";
+	case 1000:
+		return "1000baseT";
+	default:
+		break;
+	}
+
+	return "unknown";
+}
+
 static void
 print_attr_val(const struct switch_attr *attr, const struct switch_val *val)
 {
+	struct switch_port_link *link;
 	int i;
 
 	switch (attr->type) {
@@ -103,6 +121,21 @@ print_attr_val(const struct switch_attr *attr, const struct switch_val *val)
 				(val->value.ports[i].flags &
 				 SWLIB_PORT_FLAG_TAGGED) ? "t" : "");
 		}
+		break;
+	case SWITCH_TYPE_LINK:
+		link = val->value.link;
+		if (link->link)
+			printf("port:%d link:up speed:%s %s-duplex %s%s%s%s%s",
+				val->port_vlan,
+				speed_str(link->speed),
+				link->duplex ? "full" : "half",
+				link->tx_flow ? "txflow " : "",
+				link->rx_flow ? "rxflow " : "",
+				link->eee & SWLIB_LINK_FLAG_EEE_100BASET ? "eee100 " : "",
+				link->eee & SWLIB_LINK_FLAG_EEE_1000BASET ? "eee1000 " : "",
+				link->aneg ? "auto" : "");
+		else
+			printf("port:%d link:down", val->port_vlan);
 		break;
 	default:
 		printf("?unknown-type?");
@@ -178,7 +211,6 @@ swconfig_load_uci(struct switch_dev *dev, const char *name)
 {
 	struct uci_context *ctx;
 	struct uci_package *p = NULL;
-	struct uci_element *e;
 	int ret = -1;
 
 	ctx = uci_alloc_context();
@@ -206,7 +238,6 @@ int main(int argc, char **argv)
 	struct switch_dev *dev;
 	struct switch_attr *a;
 	struct switch_val val;
-	int err;
 	int i;
 
 	int cmd = CMD_NONE;
@@ -272,7 +303,7 @@ int main(int argc, char **argv)
 
 	dev = swlib_connect(cdev);
 	if (!dev) {
-		fprintf(stderr, "Failed to connect to the switch\n");
+		fprintf(stderr, "Failed to connect to the switch. Use the \"list\" command to see which switches are available.\n");
 		return 1;
 	}
 
@@ -289,6 +320,7 @@ int main(int argc, char **argv)
 		if(!a)
 		{
 			fprintf(stderr, "Unknown attribute \"%s\"\n", ckey);
+			retval = -1;
 			goto out;
 		}
 	}
@@ -351,5 +383,5 @@ int main(int argc, char **argv)
 
 out:
 	swlib_free_all(dev);
-	return 0;
+	return retval;
 }

@@ -9,13 +9,14 @@ include $(TOPDIR)/rules.mk
 ARCH:=mips
 BOARD:=brcm63xx
 BOARDNAME:=Broadcom BCM63xx
-FEATURES:=squashfs jffs2 usb atm pci pcmcia
-LINUX_VERSION:=3.8.9
-MAINTAINER:=Florian Fainelli <florian@openwrt.org>
+SUBTARGETS:=generic smp
+FEATURES:=squashfs usb atm pci pcmcia usbgadget
+KERNEL_PATCHVER:=4.1
+MAINTAINER:=Jonas Gorski <jogo@openwrt.org>
 
 include $(INCLUDE_DIR)/target.mk
 
-DEFAULT_PACKAGES += swconfig kmod-input-gpio-keys-polled kmod-button-hotplug
+DEFAULT_PACKAGES += swconfig kmod-gpio-button-hotplug
 
 define Target/Description
 	Build firmware images for Broadcom based xDSL/routers

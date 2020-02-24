@@ -20,9 +20,8 @@
 #include <linux/kernel.h>
 #include <linux/phy.h>
 #include <linux/platform_device.h>
+#include <linux/platform_data/cns3xxx.h>
 #include <linux/skbuff.h>
-#include <mach/irqs.h>
-#include <mach/platform.h>
 
 #define DRV_NAME "cns3xxx_eth"
 
@@ -57,7 +56,6 @@
 #define FIRST_SEGMENT 0x20000000
 #define LAST_SEGMENT 0x10000000
 #define FORCE_ROUTE 0x04000000
-#define IP_CHECKSUM 0x00040000
 #define UDP_CHECKSUM 0x00020000
 #define TCP_CHECKSUM 0x00010000
 
@@ -282,7 +280,6 @@ struct _rx_ring {
 };
 
 struct sw {
-	struct resource *mem_res;
 	struct switch_regs __iomem *regs;
 	struct napi_struct napi;
 	struct cns3xxx_plat_info *plat;
@@ -290,6 +287,9 @@ struct sw {
 	struct _rx_ring rx_ring;
 	struct sk_buff *frag_first;
 	struct sk_buff *frag_last;
+	struct device *dev;
+	int rx_irq;
+	int stat_irq;
 };
 
 struct port {
@@ -306,8 +306,6 @@ static struct switch_regs __iomem *mdio_regs; /* mdio command and status only */
 struct mii_bus *mdio_bus;
 static int ports_open;
 static struct port *switch_port_tab[4];
-static struct dma_pool *rx_dma_pool;
-static struct dma_pool *tx_dma_pool;
 struct net_device *napi_dev;
 
 static int cns3xxx_mdio_cmd(struct mii_bus *bus, int phy_id, int location,
@@ -377,14 +375,14 @@ static int cns3xxx_mdio_write(struct mii_bus *bus, int phy_id, int location,
 	return ret;
 }
 
-static int cns3xxx_mdio_register(void)
+static int cns3xxx_mdio_register(void __iomem *base)
 {
 	int err;
 
 	if (!(mdio_bus = mdiobus_alloc()))
 		return -ENOMEM;
 
-	mdio_regs = (struct switch_regs __iomem *)CNS3XXX_SWITCH_BASE_VIRT;
+	mdio_regs = base;
 
 	spin_lock_init(&mdio_lock);
 	mdio_bus->name = "CNS3xxx MII Bus";
@@ -441,7 +439,7 @@ static void eth_schedule_poll(struct sw *sw)
 	if (unlikely(!napi_schedule_prep(&sw->napi)))
 		return;
 
-	disable_irq_nosync(IRQ_CNS3XXX_SW_R0RXC);
+	disable_irq_nosync(sw->rx_irq);
 	__napi_schedule(&sw->napi);
 }
 
@@ -520,14 +518,14 @@ static void cns3xxx_alloc_rx_buf(struct sw *sw, int received)
 	unsigned int phys;
 
 	for (received += rx_ring->alloc_count; received > 0; received--) {
-		buf = kmalloc(RX_SEGMENT_ALLOC_SIZE, GFP_ATOMIC);
+		buf = napi_alloc_frag(RX_SEGMENT_ALLOC_SIZE);
 		if (!buf)
 			break;
 
-		phys = dma_map_single(NULL, buf + SKB_HEAD_ALIGN,
+		phys = dma_map_single(sw->dev, buf + SKB_HEAD_ALIGN,
 				      RX_SEGMENT_MRU, DMA_FROM_DEVICE);
-		if (dma_mapping_error(NULL, phys)) {
-			kfree(buf);
+		if (dma_mapping_error(sw->dev, phys)) {
+			skb_free_frag(buf);
 			break;
 		}
 
@@ -600,7 +598,7 @@ static void eth_complete_tx(struct sw *sw)
 			tx_ring->buff_tab[index] = 0;
 			if (skb)
 				dev_kfree_skb_any(skb);
-			dma_unmap_single(NULL, tx_ring->phys_tab[index],
+			dma_unmap_single(sw->dev, tx_ring->phys_tab[index],
 				desc->sdl, DMA_TO_DEVICE);
 			if (++index == TX_DESCS) {
 				index = 0;
@@ -635,10 +633,10 @@ static int eth_poll(struct napi_struct *napi, int budget)
 			break;
 
 		/* process received frame */
-		dma_unmap_single(NULL, rx_ring->phys_tab[i],
+		dma_unmap_single(sw->dev, rx_ring->phys_tab[i],
 				 RX_SEGMENT_MRU, DMA_FROM_DEVICE);
 
-		skb = build_skb(rx_ring->buff_tab[i], 0);
+		skb = build_skb(rx_ring->buff_tab[i], RX_SEGMENT_ALLOC_SIZE);
 		if (!skb)
 			break;
 
@@ -661,7 +659,7 @@ static int eth_poll(struct napi_struct *napi, int budget)
 			sw->frag_first = skb;
 		else {
 			if (sw->frag_first == sw->frag_last)
-				skb_frag_add_head(sw->frag_first, skb);
+				skb_shinfo(sw->frag_first)->frag_list = skb;
 			else
 				sw->frag_last->next = skb;
 			sw->frag_first->len += skb->len;
@@ -713,9 +711,15 @@ static int eth_poll(struct napi_struct *napi, int budget)
 		}
 	}
 
+	rx_ring->cur_index = i;
 	if (!received) {
 		napi_complete(napi);
-		enable_irq(IRQ_CNS3XXX_SW_R0RXC);
+		enable_irq(sw->rx_irq);
+		budget = 0;
+
+		/* if rx descriptors are full schedule another poll */
+		if (rx_ring->desc[(i-1) & (RX_DESCS-1)].cown)
+			eth_schedule_poll(sw);
 	}
 
 	spin_lock_bh(&tx_lock);
@@ -724,21 +728,20 @@ static int eth_poll(struct napi_struct *napi, int budget)
 
 	cns3xxx_alloc_rx_buf(sw, received);
 
-	rx_ring->cur_index = i;
-
 	wmb();
 	enable_rx_dma(sw);
 
-	return received;
+	return budget;
 }
 
-static void eth_set_desc(struct _tx_ring *tx_ring, int index, int index_last,
-			 void *data, int len, u32 config0, u32 pmap)
+static void eth_set_desc(struct sw *sw, struct _tx_ring *tx_ring, int index,
+			 int index_last, void *data, int len, u32 config0,
+			 u32 pmap)
 {
 	struct tx_desc *tx_desc = &(tx_ring)->desc[index];
 	unsigned int phys;
 
-	phys = dma_map_single(NULL, data, len, DMA_TO_DEVICE);
+	phys = dma_map_single(sw->dev, data, len, DMA_TO_DEVICE);
 	tx_desc->sdp = phys;
 	tx_desc->pmap = pmap;
 	tx_ring->phys_tab[index] = phys;
@@ -802,7 +805,7 @@ static int eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		frag = &skb_shinfo(skb)->frags[i];
 		addr = page_address(skb_frag_page(frag)) + frag->page_offset;
 
-		eth_set_desc(tx_ring, index, index_last, addr, frag->size,
+		eth_set_desc(sw, tx_ring, index, index_last, addr, frag->size,
 			     config0, pmap);
 	}
 
@@ -813,12 +816,12 @@ static int eth_xmit(struct sk_buff *skb, struct net_device *dev)
 		index = (index + 1) % TX_DESCS;
 		len0 -= skb1->len;
 
-		eth_set_desc(tx_ring, index, index_last, skb1->data, skb1->len,
-			     config0, pmap);
+		eth_set_desc(sw, tx_ring, index, index_last, skb1->data,
+			     skb1->len, config0, pmap);
 	}
 
 	tx_ring->buff_tab[index0] = skb;
-	eth_set_desc(tx_ring, index0, index_last, skb->data, len0,
+	eth_set_desc(sw, tx_ring, index0, index_last, skb->data, len0,
 		     config0 | FIRST_SEGMENT, pmap);
 
 	wmb();
@@ -893,21 +896,18 @@ static int init_rings(struct sw *sw)
 
 	__raw_writel(QUEUE_THRESHOLD, &sw->regs->dma_ring_ctrl);
 
-	if (!(rx_dma_pool = dma_pool_create(DRV_NAME, NULL,
-					    RX_POOL_ALLOC_SIZE, 32, 0)))
+	rx_ring->desc = dmam_alloc_coherent(sw->dev, RX_POOL_ALLOC_SIZE,
+					    &rx_ring->phys_addr, GFP_KERNEL);
+	if (!rx_ring->desc)
 		return -ENOMEM;
-
-	if (!(rx_ring->desc = dma_pool_alloc(rx_dma_pool, GFP_KERNEL,
-					      &rx_ring->phys_addr)))
-		return -ENOMEM;
-	memset(rx_ring->desc, 0, RX_POOL_ALLOC_SIZE);
 
 	/* Setup RX buffers */
+	memset(rx_ring->desc, 0, RX_POOL_ALLOC_SIZE);
 	for (i = 0; i < RX_DESCS; i++) {
 		struct rx_desc *desc = &(rx_ring)->desc[i];
 		void *buf;
 
-		buf = kzalloc(RX_SEGMENT_ALLOC_SIZE, GFP_KERNEL);
+		buf = netdev_alloc_frag(RX_SEGMENT_ALLOC_SIZE);
 		if (!buf)
 			return -ENOMEM;
 
@@ -917,9 +917,9 @@ static int init_rings(struct sw *sw)
 		desc->fsd = 1;
 		desc->lsd = 1;
 
-		desc->sdp = dma_map_single(NULL, buf + SKB_HEAD_ALIGN,
+		desc->sdp = dma_map_single(sw->dev, buf + SKB_HEAD_ALIGN,
 					   RX_SEGMENT_MRU, DMA_FROM_DEVICE);
-		if (dma_mapping_error(NULL, desc->sdp))
+		if (dma_mapping_error(sw->dev, desc->sdp))
 			return -EIO;
 
 		rx_ring->buff_tab[i] = buf;
@@ -929,16 +929,13 @@ static int init_rings(struct sw *sw)
 	__raw_writel(rx_ring->phys_addr, &sw->regs->fs_desc_ptr0);
 	__raw_writel(rx_ring->phys_addr, &sw->regs->fs_desc_base_addr0);
 
-	if (!(tx_dma_pool = dma_pool_create(DRV_NAME, NULL,
-					    TX_POOL_ALLOC_SIZE, 32, 0)))
+	tx_ring->desc = dmam_alloc_coherent(sw->dev, TX_POOL_ALLOC_SIZE,
+					    &tx_ring->phys_addr, GFP_KERNEL);
+	if (!tx_ring->desc)
 		return -ENOMEM;
-
-	if (!(tx_ring->desc = dma_pool_alloc(tx_dma_pool, GFP_KERNEL,
-					      &tx_ring->phys_addr)))
-		return -ENOMEM;
-	memset(tx_ring->desc, 0, TX_POOL_ALLOC_SIZE);
 
 	/* Setup TX buffers */
+	memset(tx_ring->desc, 0, TX_POOL_ALLOC_SIZE);
 	for (i = 0; i < TX_DESCS; i++) {
 		struct tx_desc *desc = &(tx_ring)->desc[i];
 		tx_ring->buff_tab[i] = 0;
@@ -956,39 +953,30 @@ static int init_rings(struct sw *sw)
 static void destroy_rings(struct sw *sw)
 {
 	int i;
-	if (sw->rx_ring.desc) {
-		for (i = 0; i < RX_DESCS; i++) {
-			struct _rx_ring *rx_ring = &sw->rx_ring;
-			struct rx_desc *desc = &(rx_ring)->desc[i];
-			struct sk_buff *skb = sw->rx_ring.buff_tab[i];
 
-			if (!skb)
-				continue;
+	for (i = 0; i < RX_DESCS; i++) {
+		struct _rx_ring *rx_ring = &sw->rx_ring;
+		struct rx_desc *desc = &(rx_ring)->desc[i];
+		void *buf = sw->rx_ring.buff_tab[i];
 
-			dma_unmap_single(NULL, desc->sdp, RX_SEGMENT_MRU,
-					 DMA_FROM_DEVICE);
-			dev_kfree_skb(skb);
-		}
-		dma_pool_free(rx_dma_pool, sw->rx_ring.desc, sw->rx_ring.phys_addr);
-		dma_pool_destroy(rx_dma_pool);
-		rx_dma_pool = 0;
-		sw->rx_ring.desc = 0;
+		if (!buf)
+			continue;
+
+		dma_unmap_single(sw->dev, desc->sdp, RX_SEGMENT_MRU,
+				 DMA_FROM_DEVICE);
+		skb_free_frag(buf);
 	}
-	if (sw->tx_ring.desc) {
-		for (i = 0; i < TX_DESCS; i++) {
-			struct _tx_ring *tx_ring = &sw->tx_ring;
-			struct tx_desc *desc = &(tx_ring)->desc[i];
-			struct sk_buff *skb = sw->tx_ring.buff_tab[i];
-			if (skb) {
-				dma_unmap_single(NULL, desc->sdp,
-					skb->len, DMA_TO_DEVICE);
-				dev_kfree_skb(skb);
-			}
-		}
-		dma_pool_free(tx_dma_pool, sw->tx_ring.desc, sw->tx_ring.phys_addr);
-		dma_pool_destroy(tx_dma_pool);
-		tx_dma_pool = 0;
-		sw->tx_ring.desc = 0;
+
+	for (i = 0; i < TX_DESCS; i++) {
+		struct _tx_ring *tx_ring = &sw->tx_ring;
+		struct tx_desc *desc = &(tx_ring)->desc[i];
+		struct sk_buff *skb = sw->tx_ring.buff_tab[i];
+
+		if (!skb)
+			continue;
+
+		dma_unmap_single(sw->dev, desc->sdp, skb->len, DMA_TO_DEVICE);
+		dev_kfree_skb(skb);
 	}
 }
 
@@ -1004,8 +992,8 @@ static int eth_open(struct net_device *dev)
 	netif_start_queue(dev);
 
 	if (!ports_open) {
-		request_irq(IRQ_CNS3XXX_SW_R0RXC, eth_rx_irq, IRQF_SHARED, "gig_switch", napi_dev);
-		request_irq(IRQ_CNS3XXX_SW_STATUS, eth_stat_irq, IRQF_SHARED, "gig_stat", napi_dev);
+		request_irq(sw->rx_irq, eth_rx_irq, IRQF_SHARED, "gig_switch", napi_dev);
+		request_irq(sw->stat_irq, eth_stat_irq, IRQF_SHARED, "gig_stat", napi_dev);
 		napi_enable(&sw->napi);
 		netif_start_queue(napi_dev);
 
@@ -1049,10 +1037,10 @@ static int eth_close(struct net_device *dev)
 	phy_stop(port->phydev);
 
 	if (!ports_open) {
-		disable_irq(IRQ_CNS3XXX_SW_R0RXC);
-		free_irq(IRQ_CNS3XXX_SW_R0RXC, napi_dev);
-		disable_irq(IRQ_CNS3XXX_SW_STATUS);
-		free_irq(IRQ_CNS3XXX_SW_STATUS, napi_dev);
+		disable_irq(sw->rx_irq);
+		free_irq(sw->rx_irq, napi_dev);
+		disable_irq(sw->stat_irq);
+		free_irq(sw->stat_irq, napi_dev);
 		napi_disable(&sw->napi);
 		netif_stop_queue(napi_dev);
 		temp = __raw_readl(&sw->regs->mac_cfg[2]);
@@ -1169,26 +1157,37 @@ static int eth_init_one(struct platform_device *pdev)
 	struct sw *sw;
 	struct net_device *dev;
 	struct cns3xxx_plat_info *plat = pdev->dev.platform_data;
-	u32 regs_phys;
 	char phy_id[MII_BUS_ID_SIZE + 3];
 	int err;
 	u32 temp;
+	struct resource *res;
+	void __iomem *regs;
 
-	if (!(napi_dev = alloc_etherdev(sizeof(struct sw))))
-		return -ENOMEM;
+	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	regs = devm_ioremap_resource(&pdev->dev, res);
+	if (IS_ERR(regs))
+		return PTR_ERR(regs);
+
+	err = cns3xxx_mdio_register(regs);
+	if (err)
+		return err;
+
+	if (!(napi_dev = alloc_etherdev(sizeof(struct sw)))) {
+		err = -ENOMEM;
+		goto err_remove_mdio;
+	}
+
 	strcpy(napi_dev->name, "switch%d");
 	napi_dev->features = NETIF_F_IP_CSUM | NETIF_F_SG | NETIF_F_FRAGLIST;
 
 	SET_NETDEV_DEV(napi_dev, &pdev->dev);
 	sw = netdev_priv(napi_dev);
 	memset(sw, 0, sizeof(struct sw));
-	sw->regs = (struct switch_regs __iomem *)CNS3XXX_SWITCH_BASE_VIRT;
-	regs_phys = CNS3XXX_SWITCH_BASE;
-	sw->mem_res = request_mem_region(regs_phys, REGS_SIZE, napi_dev->name);
-	if (!sw->mem_res) {
-		err = -EBUSY;
-		goto err_free;
-	}
+	sw->regs = regs;
+	sw->dev = &pdev->dev;
+
+	sw->rx_irq = platform_get_irq_byname(pdev, "eth_rx");
+	sw->stat_irq = platform_get_irq_byname(pdev, "eth_stat");
 
 	temp = __raw_readl(&sw->regs->phy_auto_addr);
 	temp |= (3 << 30); /* maximum frame length: 9600 bytes */
@@ -1211,7 +1210,6 @@ static int eth_init_one(struct platform_device *pdev)
 		     CRC_STRIPPING, &sw->regs->mac_glob_cfg);
 
 	if ((err = init_rings(sw)) != 0) {
-		destroy_rings(sw);
 		err = -ENOMEM;
 		goto err_free;
 	}
@@ -1240,6 +1238,7 @@ static int eth_init_one(struct platform_device *pdev)
 		temp |= (PORT_DISABLE | PORT_BLOCK_STATE | PORT_LEARN_DIS);
 		__raw_writel(temp, &sw->regs->mac_cfg[port->id]);
 
+		SET_NETDEV_DEV(dev, &pdev->dev);
 		dev->netdev_ops = &cns3xxx_netdev_ops;
 		dev->ethtool_ops = &cns3xxx_ethtool_ops;
 		dev->tx_queue_len = 1000;
@@ -1249,7 +1248,7 @@ static int eth_init_one(struct platform_device *pdev)
 		memcpy(dev->dev_addr, &plat->hwaddr[i], ETH_ALEN);
 
 		snprintf(phy_id, MII_BUS_ID_SIZE + 3, PHY_ID_FMT, "0", plat->phy[i]);
-		port->phydev = phy_connect(dev, phy_id, &cns3xxx_adjust_link, 0,
+		port->phydev = phy_connect(dev, phy_id, &cns3xxx_adjust_link,
 			PHY_INTERFACE_MODE_RGMII);
 		if ((err = IS_ERR(port->phydev))) {
 			switch_port_tab[port->id] = 0;
@@ -1287,6 +1286,8 @@ free_ports:
 	}
 err_free:
 	free_netdev(napi_dev);
+err_remove_mdio:
+	cns3xxx_mdio_remove();
 	return err;
 }
 
@@ -1295,8 +1296,8 @@ static int eth_remove_one(struct platform_device *pdev)
 	struct net_device *dev = platform_get_drvdata(pdev);
 	struct sw *sw = netdev_priv(dev);
 	int i;
-	destroy_rings(sw);
 
+	destroy_rings(sw);
 	for (i = 3; i >= 0; i--) {
 		if (switch_port_tab[i]) {
 			struct port *port = switch_port_tab[i];
@@ -1308,8 +1309,9 @@ static int eth_remove_one(struct platform_device *pdev)
 		}
 	}
 
-	release_resource(sw->mem_res);
 	free_netdev(napi_dev);
+	cns3xxx_mdio_remove();
+
 	return 0;
 }
 
@@ -1321,16 +1323,12 @@ static struct platform_driver cns3xxx_eth_driver = {
 
 static int __init eth_init_module(void)
 {
-	int err;
-	if ((err = cns3xxx_mdio_register()))
-		return err;
 	return platform_driver_register(&cns3xxx_eth_driver);
 }
 
 static void __exit eth_cleanup_module(void)
 {
 	platform_driver_unregister(&cns3xxx_eth_driver);
-	cns3xxx_mdio_remove();
 }
 
 module_init(eth_init_module);

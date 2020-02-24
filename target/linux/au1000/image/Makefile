@@ -4,14 +4,15 @@
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
 #
+
+JFFS2_BLOCKSIZE = 128k
+
 include $(TOPDIR)/rules.mk
 include $(INCLUDE_DIR)/image.mk
 
 LOADADDR = 0x81000000		# RAM start + 16M 
 KERNEL_ENTRY = 0x80100000
 RAMSIZE = 0x00100000		# 1MB
-
-JFFS2_BLOCKSIZE = 128k
 
 FLASH_KERNEL := 0xBFD00000
 FLASH_FS     := 0xBE000000
@@ -51,18 +52,20 @@ define Image/Prepare
 endef
 
 define Image/Build/Initramfs
-	$(OBJCOPY_SREC) $(BIN_DIR)/$(IMG_PREFIX)-vmlinux.elf $(BIN_DIR)/$(IMG_PREFIX)-vmlinux.srec
+	$(OBJCOPY_SREC) $(KDIR)/vmlinux-initramfs.elf $(BIN_DIR)/$(IMG_PREFIX)-vmlinux-initramfs.srec
 endef
 
 define Image/Build
-	$(TARGET_CROSS)objcopy -O srec -I binary --adjust-vma $(FLASH_FS) $(KDIR)/root.$(1) $(KDIR)/root.$(1).srec
+	$(SCRIPT_DIR)/srecimage.pl $(KDIR)/root.$(1) $(KDIR)/root.$(1).srec $(FLASH_FS)
 	grep -v S7 $(KDIR)/root.$(1).srec > $(BIN_DIR)/$(IMG_PREFIX)-$(1).srec
 	grep -v S0 $(KDIR)/kernel.flash.srec >> $(BIN_DIR)/$(IMG_PREFIX)-$(1).srec
 	$(INSTALL_BIN) $(KDIR)/kernel.flash.bin $(BIN_DIR)/$(IMG_PREFIX)-vmlinux.bin
 	$(CP) $(KDIR)/root.$(1) $(BIN_DIR)/$(IMG_PREFIX)-$(1).fs
 	$(CP) $(KDIR)/kernel.flash.srec $(BIN_DIR)/$(IMG_PREFIX)-vmlinux-flash.srec
 	$(CP) $(KDIR)/kernel.ram.srec $(BIN_DIR)/$(IMG_PREFIX)-vmlinux-ram.srec
-	tar -C $(BIN_DIR) -cvzf $(BIN_DIR)/$(IMG_PREFIX)-sysupgrade.bin $(IMG_PREFIX)-vmlinux.bin $(IMG_PREFIX)-$(1).fs
+	$(CP) $(BIN_DIR)/$(IMG_PREFIX)-$(1).fs $(TMP_DIR)/$(IMG_PREFIX)-root.fs
+	tar -C $(BIN_DIR) -cvzf $(BIN_DIR)/$(IMG_PREFIX)-$(1)-sysupgrade.bin \
+		$(IMG_PREFIX)-vmlinux.bin -C $(TMP_DIR) $(IMG_PREFIX)-root.fs
 ifeq ($(CONFIG_TARGET_ROOTFS_INITRAMFS),y)
 	$(call Image/Build/Initramfs)
 endif

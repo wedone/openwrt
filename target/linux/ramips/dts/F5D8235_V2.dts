@@ -1,36 +1,30 @@
 /dts-v1/;
 
-/include/ "rt3050.dtsi"
+#include "rt3050.dtsi"
 
 / {
 	compatible = "F5D8235_V2", "ralink,rt3052-soc";
 	model = "Belkin F5D8235 v2";
 
-	palmbus@10000000 {
-		sysc@0 {
-			ralink,pinmux = "uartlite", "jtag", "sdram", "rgmii";
-			ralink,gpiomux = "i2c", "spi", "mdio";
-			ralink,uartmux = "gpio";
-			ralink,wdtmux = <1>;
+	pinctrl {
+		state_default: pinctrl0 {
+			gpio {
+				ralink,group = "spi", "i2c", "jtag", "rgmii", "mdio", "uartf";
+				ralink,function = "gpio";
+			};
 		};
-
-		gpio0: gpio@600 {
-			status = "okay";
-		};
-
 	};
 
 	cfi@1f000000 {
 		compatible = "cfi-flash";
 		reg = <0x1f000000 0x800000>;
-
 		bank-width = <2>;
 		device-width = <2>;
 		#address-cells = <1>;
 		#size-cells = <1>;
 
-		partition@0 {
-			label = "u-boot";
+		uboot: partition@0 {
+			label = "uboot";
 			reg = <0x0 0x50000>;
 			read-only;
 		};
@@ -52,16 +46,15 @@
 	};
 
 	ethernet@10100000 {
-		status = "okay";
+		mtd-mac-address = <&uboot 0x40004>;
 	};
 
 	esw@10110000 {
-		status = "okay";
-		ralink,portmap = <0x3f>;
+		mediatek,portmap = <0x3f>;
 	};
 
 	wmac@10180000 {
-		status = "okay";
+		ralink,mtd-eeprom = <&uboot 0x40000>;
 	};
 
 	otg@101c0000 {
@@ -69,47 +62,56 @@
 	};
 
 	rtl8366rb {
-		compatible = "rtl8367rb";
+		compatible = "rtl8366rb";
 		gpio-sda = <&gpio0 1 0>;
 		gpio-sck = <&gpio0 2 0>;
 	};
 
 	gpio-leds {
 		compatible = "gpio-leds";
+
 		internet {
-			label = "f5d8235v2:blue:internet";
+			label = "f5d8235-v2:blue:internet";
 			gpios = <&gpio0 5 1>;
 		};
+
 		internet2 {
-			label = "f5d8235v2:amber:internet";
+			label = "f5d8235-v2:amber:internet";
 			gpios = <&gpio0 6 1>;
 		};
+
 		modem {
-			label = "f5d8235v2:blue:modem";
+			label = "f5d8235-v2:blue:modem";
 			gpios = <&gpio0 11 1>;
 		};
+
 		modem2 {
-			label = "f5d8235v2:amber:modem";
+			label = "f5d8235-v2:amber:modem";
 			gpios = <&gpio0 8 1>;
 		};
+
 		router {
-			label = "f5d8235v2:blue:router";
+			label = "f5d8235-v2:blue:router";
 			gpios = <&gpio0 9 1>;
 		};
+
 		storage {
-			label = "f5d8235v2:blue:storage";
+			label = "f5d8235-v2:blue:storage";
 			gpios = <&gpio0 23 1>;
 		};
+
 		storage2 {
-			label = "f5d8235v2:amber:storage";
+			label = "f5d8235-v2:amber:storage";
 			gpios = <&gpio0 22 1>;
 		};
+
 		security {
-			label = "f5d8235v2:blue:security";
+			label = "f5d8235-v2:blue:security";
 			gpios = <&gpio0 13 1>;
 		};
+
 		security2 {
-			label = "f5d8235v2:amber:security";
+			label = "f5d8235-v2:amber:security";
 			gpios = <&gpio0 12 1>;
 		};
 	};

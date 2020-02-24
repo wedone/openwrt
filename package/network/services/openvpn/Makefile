@@ -1,5 +1,5 @@
 #
-# Copyright (C) 2010-2012 OpenWrt.org
+# Copyright (C) 2010-2015 OpenWrt.org
 #
 # This is free software, licensed under the GNU General Public License v2.
 # See /LICENSE for more information.
@@ -9,17 +9,19 @@ include $(TOPDIR)/rules.mk
 
 PKG_NAME:=openvpn
 
-PKG_VERSION:=2.3.0
-PKG_RELEASE=1
+PKG_VERSION:=2.3.10
+PKG_RELEASE:=1
 
 PKG_SOURCE_URL:=http://swupdate.openvpn.net/community/releases
-PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.gz
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.xz
+PKG_MD5SUM:=8831ded42db4317e287157b6b8cba74c
 
 PKG_BUILD_DIR:=$(BUILD_DIR)/$(PKG_NAME)-$(BUILD_VARIANT)/$(PKG_NAME)-$(PKG_VERSION)
 
 PKG_INSTALL:=1
 PKG_FIXUP:=autoreconf
 PKG_BUILD_PARALLEL:=1
+PKG_LICENSE:=GPL-2.0
 
 include $(INCLUDE_DIR)/package.mk
 
@@ -60,17 +62,16 @@ endif
 CONFIGURE_VARS += \
 	IFCONFIG=/sbin/ifconfig \
 	ROUTE=/sbin/route \
-	IPROUTE=/usr/sbin/ip \
+	IPROUTE=/sbin/ip \
 	NETSTAT=/sbin/netstat
 
 define Build/Configure
 	$(call Build/Configure/Default, \
-		--enable-small \
+		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_SMALL),--enable-small) \
 		--disable-selinux \
 		--disable-systemd \
 		--disable-plugins \
 		--disable-debug \
-		--disable-eurephia \
 		--disable-pkcs11 \
 		--enable-password-save \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_LZO),--enable,--disable)-lzo \
@@ -78,7 +79,7 @@ define Build/Configure
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_SERVER),--enable,--disable)-server \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_MANAGEMENT),--enable,--disable)-management \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_SOCKS),--enable,--disable)-socks \
-		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_HTTP),--enable,--disable)-http \
+		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_HTTP),--enable,--disable)-http-proxy \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_FRAGMENT),--enable,--disable)-fragment \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_MULTIHOME),--enable,--disable)-multihome \
 		$(if $(CONFIG_OPENVPN_$(BUILD_VARIANT)_ENABLE_IPROUTE2),--enable,--disable)-iproute2 \

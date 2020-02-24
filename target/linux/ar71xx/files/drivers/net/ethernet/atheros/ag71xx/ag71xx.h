@@ -51,14 +51,14 @@
 #define AG71XX_INT_INIT	(AG71XX_INT_ERR | AG71XX_INT_POLL)
 
 #define AG71XX_TX_MTU_LEN	1540
-#define AG71XX_RX_PKT_SIZE	\
-	(ETH_FRAME_LEN + ETH_FCS_LEN + VLAN_HLEN)
-#define AG71XX_RX_BUF_SIZE (AG71XX_RX_PKT_SIZE + NET_SKB_PAD + NET_IP_ALIGN)
 
-#define AG71XX_TX_RING_SIZE_DEFAULT	64
-#define AG71XX_RX_RING_SIZE_DEFAULT	128
+#define AG71XX_TX_RING_SPLIT		512
+#define AG71XX_TX_RING_DS_PER_PKT	DIV_ROUND_UP(AG71XX_TX_MTU_LEN, \
+						     AG71XX_TX_RING_SPLIT)
+#define AG71XX_TX_RING_SIZE_DEFAULT	128
+#define AG71XX_RX_RING_SIZE_DEFAULT	256
 
-#define AG71XX_TX_RING_SIZE_MAX		256
+#define AG71XX_TX_RING_SIZE_MAX		128
 #define AG71XX_RX_RING_SIZE_MAX		256
 
 #ifdef CONFIG_AG71XX_DEBUG
@@ -85,24 +85,29 @@ struct ag71xx_desc {
 	u32	pad;
 } __attribute__((aligned(4)));
 
+#define AG71XX_DESC_SIZE	roundup(sizeof(struct ag71xx_desc), \
+					L1_CACHE_BYTES)
+
 struct ag71xx_buf {
 	union {
 		struct sk_buff	*skb;
 		void		*rx_buf;
 	};
-	struct ag71xx_desc	*desc;
-	dma_addr_t		dma_addr;
-	unsigned long		timestamp;
+	union {
+		dma_addr_t	dma_addr;
+		unsigned long	timestamp;
+	};
+	unsigned int		len;
 };
 
 struct ag71xx_ring {
 	struct ag71xx_buf	*buf;
 	u8			*descs_cpu;
 	dma_addr_t		descs_dma;
-	unsigned int		desc_size;
+	u16			desc_split;
+	u16			order;
 	unsigned int		curr;
 	unsigned int		dirty;
-	unsigned int		size;
 };
 
 struct ag71xx_mdio {
@@ -165,6 +170,10 @@ struct ag71xx {
 	unsigned int		speed;
 	int			duplex;
 
+	unsigned int		max_frame_len;
+	unsigned int		desc_pktlen_mask;
+	unsigned int		rx_buf_size;
+
 	struct work_struct	restart_work;
 	struct delayed_work	link_work;
 	struct timer_list	oom_timer;
@@ -195,9 +204,16 @@ static inline int ag71xx_desc_empty(struct ag71xx_desc *desc)
 	return (desc->ctrl & DESC_EMPTY) != 0;
 }
 
-static inline int ag71xx_desc_pktlen(struct ag71xx_desc *desc)
+static inline struct ag71xx_desc *
+ag71xx_ring_desc(struct ag71xx_ring *ring, int idx)
 {
-	return desc->ctrl & DESC_PKTLEN_M;
+	return (struct ag71xx_desc *) &ring->descs_cpu[idx * AG71XX_DESC_SIZE];
+}
+
+static inline int
+ag71xx_ring_size_order(int size)
+{
+	return fls(size - 1);
 }
 
 /* Register offsets */

@@ -8,7 +8,7 @@
  *  by the Free Software Foundation.
  */
 
-#include<asm/mach-ath79/ath79.h>
+#include <asm/mach-ath79/ath79.h>
 
 #include "dev-eth.h"
 #include "dev-gpio-buttons.h"
@@ -59,6 +59,7 @@ static struct gpio_keys_button wpe72_gpio_keys[] __initdata = {
 		.code           = KEY_RESTART,
 		.debounce_interval = WPE72_KEYS_DEBOUNCE_INTERVAL,
 		.gpio           = WPE72_GPIO_RESET,
+		.active_low	= 1,
 	}
 };
 

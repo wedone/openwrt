@@ -9,11 +9,14 @@ include $(TOPDIR)/rules.mk
 ARCH:=arm
 BOARD:=gemini
 BOARDNAME:=Cortina Systems CS351x
-FEATURES:=squashfs pci
-CFLAGS:=-Os -pipe -march=armv4 -mtune=fa526 -fno-caller-saves
-MAINTAINER:=Imre Kaloz <kaloz@openwrt.org>
+SUBTARGETS:=raidsonic wiligear
+FEATURES:=squashfs pci rtc
+CPU_TYPE:=fa526
+MAINTAINER:=Roman Yeryomin <roman@advem.lv>
 
-LINUX_VERSION:=3.9-rc4
+KERNEL_PATCHVER:=4.1
+
+KERNELNAME:=zImage
 
 include $(INCLUDE_DIR)/target.mk
 

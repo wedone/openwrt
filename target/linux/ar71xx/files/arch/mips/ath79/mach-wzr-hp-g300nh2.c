@@ -1,7 +1,7 @@
 /*
  *  Buffalo WZR-HP-G300NH2 board support
  *
- *  Copyright (C) 2011 Felix Fietkau <nbd@openwrt.org>
+ *  Copyright (C) 2011 Felix Fietkau <nbd@nbd.name>
  *  Copyright (C) 2011 Mark Deneen <mdeneen@gmail.com>
  *
  *  This program is free software; you can redistribute it and/or modify it
@@ -44,22 +44,14 @@ static struct mtd_partition wzrhpg300nh2_flash_partitions[] = {
 		.size		= 0x0010000,
 		.mask_flags	= MTD_WRITEABLE,
 	}, {
-		.name		= "kernel",
+		.name		= "firmware",
 		.offset		= 0x0060000,
-		.size		= 0x0100000,
-	}, {
-		.name		= "rootfs",
-		.offset		= 0x0160000,
-		.size		= 0x1e90000,
+		.size		= 0x1f90000,
 	}, {
 		.name		= "user_property",
 		.offset		= 0x1ff0000,
 		.size		= 0x0010000,
 		.mask_flags	= MTD_WRITEABLE,
-	}, {
-		.name		= "firmware",
-		.offset		= 0x0060000,
-		.size		= 0x1f90000,
 	}
 };
 

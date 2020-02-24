@@ -10,7 +10,7 @@ include $(TOPDIR)/rules.mk
 PKG_NAME:=gettext
 PKG_RELEASE:=2
 
-PKG_LICENSE:=FREE
+PKG_LICENSE:=FSFULLR
 PKG_LICENSE_FILES:=LICENSE
 
 PKG_MAINTAINER:=Jo-Philipp Wich <jow@openwrt.org>
@@ -52,11 +52,11 @@ define Host/Compile
 endef
 
 define Host/Install
-	$(INSTALL_DIR) $(STAGING_DIR_HOST)/include
-	$(INSTALL_DATA) ./src/include/libintl.h $(STAGING_DIR_HOST)/include/
+	$(INSTALL_DIR) $(STAGING_DIR)/host/include
+	$(INSTALL_DATA) ./src/include/libintl.h $(STAGING_DIR)/host/include/
 
-	$(INSTALL_DIR) $(STAGING_DIR_HOST)/share/aclocal
-	$(INSTALL_DATA) ./src/m4/* $(STAGING_DIR_HOST)/share/aclocal/
+	$(INSTALL_DIR) $(STAGING_DIR)/host/share/aclocal
+	$(INSTALL_DATA) ./src/m4/* $(STAGING_DIR)/host/share/aclocal/
 endef
 
 define Package/libintl/install

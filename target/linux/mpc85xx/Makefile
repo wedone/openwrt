@@ -9,14 +9,19 @@ include $(TOPDIR)/rules.mk
 ARCH:=powerpc
 BOARD:=mpc85xx
 BOARDNAME:=Freescale MPC85xx
-CFLAGS:=-Os -pipe -fno-caller-saves -mcpu=8540
-FEATURES:=spe_fpu squashfs
+CPU_TYPE:=8540
+FEATURES:=squashfs
 MAINTAINER:=Imre Kaloz <kaloz@openwrt.org>
 SUBTARGETS=generic p1020
 
-LINUX_VERSION:=3.8.9
+KERNEL_PATCHVER:=4.4
 
 include $(INCLUDE_DIR)/target.mk
+
+KERNEL_IMAGES := zImage
+ifeq ($(SUBTARGET),generic)
+KERNEL_IMAGES += cuImage.tl-wdr4900-v1
+endif
 
 DEFAULT_PACKAGES += \
 	kmod-input-core kmod-input-gpio-keys kmod-button-hotplug \

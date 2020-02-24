@@ -1,2 +1,5 @@
 #!/bin/sh
-touch /tmp/failsafe_button
+
+[ "${TYPE}" = "switch" ] || echo ${BUTTON} > /tmp/failsafe_button
+
+return 0

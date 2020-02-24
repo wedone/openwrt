@@ -2,29 +2,24 @@
 
 LINUX_RELEASE?=1
 
-ifeq ($(LINUX_VERSION),3.3.8)
-  LINUX_KERNEL_MD5SUM:=f1058f64eed085deb44f10cee8541d50
-endif
-ifeq ($(LINUX_VERSION),3.6.11)
-  LINUX_KERNEL_MD5SUM:=3d602ad7f7984509c3e923a5ae90bc54
-endif
-ifeq ($(LINUX_VERSION),3.7.10)
-  LINUX_KERNEL_MD5SUM:=09624c3702107076efcac5e1cd8a18ec
-endif
-ifeq ($(LINUX_VERSION),3.8.9)
-  LINUX_KERNEL_MD5SUM:=b5286ad3d8a729e9ae48b26211e05aec
-endif
+LINUX_VERSION-3.18 = .29
+LINUX_VERSION-4.1 = .23
+LINUX_VERSION-4.4 = .7
 
-# disable the md5sum check for unknown kernel versions
-LINUX_KERNEL_MD5SUM?=x
+LINUX_KERNEL_MD5SUM-3.18.29 = b25737a0bc98e80d12200de93f239c28
+LINUX_KERNEL_MD5SUM-4.1.23 = 5cb969fa874e110118722398b7c72c5d
+LINUX_KERNEL_MD5SUM-4.4.7 = 4345597c9a10bd73c28b6ae3a854d8d7
+
+ifdef KERNEL_PATCHVER
+  LINUX_VERSION:=$(KERNEL_PATCHVER)$(strip $(LINUX_VERSION-$(KERNEL_PATCHVER)))
+endif
 
 split_version=$(subst ., ,$(1))
 merge_version=$(subst $(space),.,$(1))
 KERNEL_BASE=$(firstword $(subst -, ,$(LINUX_VERSION)))
 KERNEL=$(call merge_version,$(wordlist 1,2,$(call split_version,$(KERNEL_BASE))))
-ifeq ($(firstword $(call split_version,$(KERNEL_BASE))),2)
-  KERNEL_PATCHVER=$(call merge_version,$(wordlist 1,3,$(call split_version,$(KERNEL_BASE))))
-else
-  KERNEL_PATCHVER=$(KERNEL)
-endif
+KERNEL_PATCHVER ?= $(KERNEL)
 
+# disable the md5sum check for unknown kernel versions
+LINUX_KERNEL_MD5SUM:=$(LINUX_KERNEL_MD5SUM-$(strip $(LINUX_VERSION)))
+LINUX_KERNEL_MD5SUM?=x

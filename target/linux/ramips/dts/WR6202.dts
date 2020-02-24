@@ -1,6 +1,6 @@
 /dts-v1/;
 
-/include/ "rt3050.dtsi"
+#include "rt3050.dtsi"
 
 / {
 	compatible = "WR6202", "ralink,rt3052-soc";
@@ -10,25 +10,23 @@
 		bootargs = "console=ttyS0,115200";
 	};
 
-	palmbus@10000000 {
-		sysc@0 {
-			ralink,pinmux = "i2c", "spi", "uartlite", "jtag", "mdio", "sdram", "rgmii";
-			ralink,uartmux = "gpio";
-			ralink,wdtmux = <1>;
+	pinctrl {
+		state_default: pinctrl0 {
+			gpio {
+				ralink,group = "spi", "i2c", "jtag", "rgmii", "mdio", "uartf";
+				ralink,function = "gpio";
+			};
 		};
-
-		gpio0: gpio@600 {
-			status = "okay";
-		};
-
 	};
 
 	gpio-leds {
 		compatible = "gpio-leds";
+
 		wps {
 			label = "wr6202:blue:wps";
 			gpios = <&gpio0 14 1>;
 		};
+
 		3g {
 			label = "wr6202:blue:3g";
 			gpios = <&gpio0 13 1>;
@@ -40,11 +38,13 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		poll-interval = <20>;
+
 		reset {
 			label = "reset";
 			gpios = <&gpio0 10 1>;
 			linux,code = <0x198>;
 		};
+
 		wps {
 			label = "wps";
 			gpios = <&gpio0 0 1>;
@@ -55,7 +55,6 @@
 	cfi@1f000000 {
 		compatible = "cfi-flash";
 		reg = <0x1f000000 0x800000>;
-
 		bank-width = <2>;
 		device-width = <2>;
 		#address-cells = <1>;
@@ -86,16 +85,15 @@
 	};
 
 	ethernet@10100000 {
-		status = "okay";
+		mtd-mac-address = <&factory 0x28>;
 	};
 
 	esw@10110000 {
-		status = "okay";
-		ralink,portmap = <0x3e>;
+		mediatek,portmap = <0x3e>;
 	};
 
 	wmac@10180000 {
-		status = "okay";
+		ralink,mtd-eeprom = <&factory 0>;
 	};
 
 	otg@101c0000 {

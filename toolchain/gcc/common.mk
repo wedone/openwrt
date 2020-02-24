@@ -1,8 +1,8 @@
 #
 # Copyright (C) 2002-2003 Erik Andersen <andersen@uclibc.org>
 # Copyright (C) 2004 Manuel Novoa III <mjn3@uclibc.org>
-# Copyright (C) 2005-2006 Felix Fietkau <nbd@openwrt.org>
-# Copyright (C) 2006-2013 OpenWrt.org
+# Copyright (C) 2005-2006 Felix Fietkau <nbd@nbd.name>
+# Copyright (C) 2006-2014 OpenWrt.org
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,39 +25,21 @@ GCC_VERSION:=$(call qstrip,$(CONFIG_GCC_VERSION))
 PKG_VERSION:=$(firstword $(subst +, ,$(GCC_VERSION)))
 GCC_DIR:=$(PKG_NAME)-$(PKG_VERSION)
 
-ifeq ($(findstring linaro, $(CONFIG_GCC_VERSION)),linaro)
-    ifeq ($(CONFIG_GCC_VERSION),"4.6-linaro")
-      PKG_REV:=4.6-2012.12
-      PKG_VERSION:=4.6.4
-      PKG_VERSION_MAJOR:=4.6
-      PKG_MD5SUM:=6b6c6a4faa026edd1193cf6426309039
-    endif
-    ifeq ($(CONFIG_GCC_VERSION),"4.7-linaro")
-      PKG_REV:=4.7-2013.03
-      PKG_VERSION:=4.7.3
-      PKG_VERSION_MAJOR:=4.7
-      PKG_MD5SUM:=72e37ed0601f72e4d7e842d7e5373148
-    endif
-    PKG_SOURCE_URL:=http://launchpad.net/gcc-linaro/$(PKG_VERSION_MAJOR)/$(PKG_REV)/+download/
-    PKG_SOURCE:=$(PKG_NAME)-linaro-$(PKG_REV).tar.bz2
-    GCC_DIR:=gcc-linaro-$(PKG_REV)
-    HOST_BUILD_DIR:=$(BUILD_DIR_TOOLCHAIN)/$(GCC_DIR)
-else
-  PKG_SOURCE_URL:=@GNU/gcc/gcc-$(PKG_VERSION)
-  PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
+PKG_SOURCE_URL:=@GNU/gcc/gcc-$(PKG_VERSION)
+PKG_SOURCE:=$(PKG_NAME)-$(PKG_VERSION).tar.bz2
 
-  ifeq ($(PKG_VERSION),4.4.7)
-    PKG_MD5SUM:=295709feb4441b04e87dea3f1bab4281
-  endif
-  ifeq ($(PKG_VERSION),4.6.3)
-    PKG_MD5SUM:=773092fe5194353b02bb0110052a972e
-  endif
-  ifeq ($(PKG_VERSION),4.7.2)
-    PKG_MD5SUM:=cc308a0891e778cfda7a151ab8a6e762
-  endif
-  ifeq ($(PKG_VERSION),4.8.0)
-    PKG_MD5SUM:=e6040024eb9e761c3bea348d1fa5abb0
-  endif
+ifeq ($(PKG_VERSION),5.3.0)
+  PKG_MD5SUM:=c9616fd448f980259c31de613e575719
+endif
+
+ifneq ($(CONFIG_GCC_VERSION_4_8_ARC),)
+    PKG_VERSION:=4.8.4
+    PKG_SOURCE_URL:=https://github.com/foss-for-synopsys-dwc-arc-processors/gcc/archive/arc-2015.06
+    PKG_SOURCE:=$(PKG_NAME)-$(GCC_VERSION).tar.gz
+    PKG_MD5SUM:=25007ebb02a5f6c32532b103bb5984a0
+    PKG_REV:=2015.06
+    GCC_DIR:=gcc-arc-$(PKG_REV)
+    HOST_BUILD_DIR = $(BUILD_DIR_HOST)/$(PKG_NAME)-$(GCC_VERSION)
 endif
 
 PATCH_DIR=../patches/$(GCC_VERSION)
@@ -87,15 +69,29 @@ HOST_STAMP_CONFIGURED:=$(GCC_BUILD_DIR)/.configured
 HOST_STAMP_INSTALLED:=$(STAGING_DIR_HOST)/stamp/.gcc_$(GCC_VARIANT)_installed
 
 SEP:=,
-TARGET_LANGUAGES:="c$(if $(CONFIG_INSTALL_LIBSTDCPP),$(SEP)c++)$(if $(CONFIG_INSTALL_LIBGCJ),$(SEP)java)$(if $(CONFIG_INSTALL_GFORTRAN),$(SEP)fortran)"
+TARGET_LANGUAGES:="c,c++$(if $(CONFIG_INSTALL_LIBGCJ),$(SEP)java)$(if $(CONFIG_INSTALL_GFORTRAN),$(SEP)fortran)"
 
 export libgcc_cv_fixed_point=no
 ifdef CONFIG_USE_UCLIBC
   export glibcxx_cv_c99_math_tr1=no
 endif
 
+ifdef CONFIG_GCC_USE_GRAPHITE
+  ifdef CONFIG_GCC_VERSION_4_8
+    GRAPHITE_CONFIGURE=--with-cloog=$(REAL_STAGING_DIR_HOST)
+  else
+    GRAPHITE_CONFIGURE=--with-isl=$(REAL_STAGING_DIR_HOST)
+  endif
+else
+  GRAPHITE_CONFIGURE=--without-isl --without-cloog
+endif
+
 GCC_CONFIGURE:= \
 	SHELL="$(BASH)" \
+	$(if $(shell gcc --version 2>&1 | grep LLVM), \
+		CFLAGS="-O2 -fbracket-depth=512 -pipe" \
+		CXXFLAGS="-O2 -fbracket-depth=512 -pipe" \
+	) \
 	$(HOST_SOURCE_DIR)/configure \
 		--with-bugurl=$(BUGURL) \
 		--with-pkgversion="$(PKGVERSION)" \
@@ -114,17 +110,18 @@ GCC_CONFIGURE:= \
 		$(SOFT_FLOAT_CONFIG_OPTION) \
 		$(call qstrip,$(CONFIG_EXTRA_GCC_CONFIG_OPTIONS)) \
 		$(if $(CONFIG_mips64)$(CONFIG_mips64el),--with-arch=mips64 \
-			--with-abi=$(subst ",,$(CONFIG_MIPS64_ABI))) \
+			--with-abi=$(call qstrip,$(CONFIG_MIPS64_ABI))) \
+		$(if $(CONFIG_arc),--with-cpu=$(CONFIG_CPU_TYPE)) \
 		--with-gmp=$(TOPDIR)/staging_dir/host \
 		--with-mpfr=$(TOPDIR)/staging_dir/host \
+		--with-mpc=$(TOPDIR)/staging_dir/host \
 		--disable-decimal-float
 ifneq ($(CONFIG_mips)$(CONFIG_mipsel),)
   GCC_CONFIGURE += --with-mips-plt
 endif
 
-ifeq ($(CONFIG_GCC_VERSION_4_4),)
-  GCC_CONFIGURE+= \
-		--with-mpc=$(TOPDIR)/staging_dir/host
+ifndef GCC_VERSION_4_8
+  GCC_CONFIGURE += --with-diagnostics-color=auto-if-env
 endif
 
 ifneq ($(CONFIG_SSP_SUPPORT),)
@@ -157,6 +154,13 @@ endif
 
 ifneq ($(GCC_ARCH),)
   GCC_CONFIGURE+= --with-arch=$(GCC_ARCH)
+endif
+
+ifneq ($(CONFIG_SOFT_FLOAT),y)
+  ifeq ($(CONFIG_arm),y)
+    GCC_CONFIGURE+= \
+		--with-float=hard
+  endif
 endif
 
 GCC_MAKE:= \
